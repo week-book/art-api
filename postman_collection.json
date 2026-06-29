@@ -1,0 +1,195 @@
+{
+  "info": {
+    "name": "art-api",
+    "description": "art-api (ART-SPRINT-06 MVP + ART-SPRINT-07 Auth) — все эндпоинты из architecture.md. {{base_url}} по умолчанию указывает на локальный сервер. {{api_key}} — ключ, выданный через `artkeys create` (см. cmd/artkeys), вставь сюда сырой ключ вида wa_live_... Auth настроен на уровне коллекции (Bearer {{api_key}}) — каждый запрос внутри 'Функциональные' наследует его автоматически. Папка 'Инфраструктурные' явно отключает auth (noauth) — /healthz, /readyz, /metrics не требуют ключ.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{api_key}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8080" },
+    { "key": "example_uuid", "value": "01dfbf6f-ba1d-4195-8ed2-04ab160c815d" },
+    { "key": "api_key", "value": "", "description": "Вставь сырой ключ из `artkeys create --label \"...\"`. Ключ показывается только один раз при создании." }
+  ],
+  "item": [
+    {
+      "name": "Инфраструктурные",
+      "auth": { "type": "noauth" },
+      "description": "/healthz, /readyz, /metrics — без auth по дизайну (см. architecture.md, router.go): k8s liveness/readiness и Prometheus scrape не должны зависеть от ключа.",
+      "item": [
+        {
+          "name": "GET /healthz",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/healthz", "host": ["{{base_url}}"], "path": ["healthz"] }
+          }
+        },
+        {
+          "name": "GET /readyz",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/readyz", "host": ["{{base_url}}"], "path": ["readyz"] }
+          }
+        },
+        {
+          "name": "GET /metrics",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/metrics", "host": ["{{base_url}}"], "path": ["metrics"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Функциональные",
+      "description": "Требуют API-ключ (Authorization: Bearer <key>, наследуется с уровня коллекции) — см. internal/auth/middleware.go. Альтернативный заголовок X-API-Key тоже поддерживается, но не используется здесь по умолчанию.",
+      "item": [
+        {
+          "name": "GET /artworks (все)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/artworks", "host": ["{{base_url}}"], "path": ["artworks"] }
+          }
+        },
+        {
+          "name": "GET /artworks?style=Symbolism&limit=5",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/artworks?style=Symbolism&limit=5",
+              "host": ["{{base_url}}"],
+              "path": ["artworks"],
+              "query": [
+                { "key": "style", "value": "Symbolism" },
+                { "key": "limit", "value": "5" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /artworks?artist_name=...&offset=...",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/artworks?artist_name=Viktor Pivovarov&offset=2&limit=3",
+              "host": ["{{base_url}}"],
+              "path": ["artworks"],
+              "query": [
+                { "key": "artist_name", "value": "Viktor Pivovarov" },
+                { "key": "offset", "value": "2" },
+                { "key": "limit", "value": "3" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /artworks/{id} (валидный uuid)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/artworks/{{example_uuid}}",
+              "host": ["{{base_url}}"],
+              "path": ["artworks", "{{example_uuid}}"]
+            }
+          }
+        },
+        {
+          "name": "GET /artworks/{id} (404 — несуществующий uuid)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/artworks/00000000-0000-0000-0000-000000000000",
+              "host": ["{{base_url}}"],
+              "path": ["artworks", "00000000-0000-0000-0000-000000000000"]
+            }
+          }
+        },
+        {
+          "name": "GET /artworks/random",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/artworks/random", "host": ["{{base_url}}"], "path": ["artworks", "random"] }
+          }
+        },
+        {
+          "name": "GET /artworks/random?style=Symbolism",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/artworks/random?style=Symbolism",
+              "host": ["{{base_url}}"],
+              "path": ["artworks", "random"],
+              "query": [{ "key": "style", "value": "Symbolism" }]
+            }
+          }
+        },
+        {
+          "name": "GET /artists",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/artists", "host": ["{{base_url}}"], "path": ["artists"] }
+          }
+        },
+        {
+          "name": "GET /taxonomy",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/taxonomy", "host": ["{{base_url}}"], "path": ["taxonomy"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth — проверка защиты",
+      "description": "Ручные проверки того, что middleware реально отклоняет запросы без валидного ключа (см. internal/auth/middleware.go, router_test.go TestArtworksList_NoKey_Unauthorized / TestArtworksList_WrongKey_Unauthorized — то же самое, что эти тесты проверяют автоматически).",
+      "item": [
+        {
+          "name": "GET /artworks без ключа (ожидается 401)",
+          "auth": { "type": "noauth" },
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/artworks", "host": ["{{base_url}}"], "path": ["artworks"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 401 without API key', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /artworks с неверным ключом (ожидается 401)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer wa_live_0000000000000000000000000000000000000000000000000000000000000000" }
+            ],
+            "url": { "raw": "{{base_url}}/artworks", "host": ["{{base_url}}"], "path": ["artworks"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 401 with bogus API key', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

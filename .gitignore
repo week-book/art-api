@@ -1,0 +1,15 @@
+/art-api
+/artkeys
+/data/artworks.json
+
+# Секреты и локальные переопределения (см. .env.example)
+.env
+
+# Стандартные Go-артефакты
+*.test
+*.out
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/

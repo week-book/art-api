@@ -1,0 +1,85 @@
+version: "3.9"
+
+# Локальный стенд для разработки auth-трека (ART-SPRINT-07). Не имеет
+# отношения к деплою на платформу (week-infra) — это инструмент "запустить
+# у себя и проверить", решение от 29.06.2026: свой инстанс Postgres, не
+# week-infra (см. platform-context.md — тот Postgres "без реальных схем,
+# использовать после явного подтверждения от инфраструктурного проекта";
+# здесь мы его не трогаем).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-art_api}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-art_api_local_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-art_api}
+    ports:
+      # Проброс наружу удобен для локальной отладки (psql с хоста), но не
+      # обязателен для самого art-api — он обращается к postgres по
+      # внутренней docker-сети через DATABASE_URL ниже.
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-art_api}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Одноразовый сервис: применяет миграции и завершается. art-api ждёт его
+  # успешного завершения (condition: service_completed_successfully), не
+  # просто healthy postgres — иначе art-api мог бы стартовать раньше, чем
+  # таблица api_keys существует, и упасть на первом запросе.
+  migrate:
+    image: migrate/migrate:v4.17.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./migrations:/migrations:ro
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://${POSTGRES_USER:-art_api}:${POSTGRES_PASSWORD:-art_api_local_dev}@postgres:5432/${POSTGRES_DB:-art_api}?sslmode=disable"
+      - "up"
+    restart: "no"
+
+  art-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-art_api}:${POSTGRES_PASSWORD:-art_api_local_dev}@postgres:5432/${POSTGRES_DB:-art_api}?sslmode=disable
+    ports:
+      - "${ART_API_PORT:-8080}:8080"
+    volumes:
+      # artworks.json подменяется без пересборки образа — см. комментарий
+      # в Dockerfile. Положи актуальный экспорт из sheets-export сюда перед
+      # запуском: docker compose up.
+      - ./data:/app/data:ro
+
+  # Не стартует с `docker compose up` (profile-флаг). Использование:
+  #   docker compose run --rm artkeys create --label "MCP server"
+  #   docker compose run --rm artkeys list
+  #   docker compose run --rm artkeys revoke <id>
+  # Та же причина, что у решения "выдача ключей — не HTTP-эндпоинт": ты сам
+  # решаешь когда выдать ключ, это не должно крутиться как постоянный сервис.
+  artkeys:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["tools"]
+    entrypoint: ["./artkeys"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-art_api}:${POSTGRES_PASSWORD:-art_api_local_dev}@postgres:5432/${POSTGRES_DB:-art_api}?sslmode=disable
+
+volumes:
+  postgres-data:
