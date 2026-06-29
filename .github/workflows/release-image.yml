@@ -1,0 +1,28 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  build:
+    permissions:
+      contents: read
+      packages: write
+    uses: week-book/github-actions/.github/workflows/docker-build-push.yml@v1
+    with:
+      image: ghcr.io/week-book/art-api
+
+  deploy:
+    permissions:
+      contents: write
+    needs: build
+    uses: week-book/github-actions/.github/workflows/update-kustomize.yml@v1
+    with:
+      manifests_repo: week-book/k8s-manifests
+      manifests_path: web-art/art-api
+      service_name: frontend
+      image_tag: sha-${{ github.sha }}
+    secrets:
+      K8S_REPO_TOKEN: ${{ secrets.K8S_REPO_TOKEN }}
