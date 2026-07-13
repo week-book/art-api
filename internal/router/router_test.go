@@ -12,7 +12,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 
-	"github.com/week-book/art-api/internal/auth"
+	"github.com/week-book/apikeys"
 	"github.com/week-book/art-api/internal/metrics"
 	"github.com/week-book/art-api/internal/store"
 )
@@ -23,16 +23,16 @@ import (
 // вызывающему тесту явно, а не угадывается из константы.
 const testAPIKeyLabel = "router_test fixture key"
 
-// issueTestKey создаёt валидный API-ключ в переданном auth.Store и
+// issueTestKey создаёt валидный API-ключ в переданном apikeys.Store и
 // возвращает сырой ключ — тесты подставляют его в заголовок Authorization.
-func issueTestKey(t *testing.T, s auth.Store) string {
+func issueTestKey(t *testing.T, s apikeys.Store) string {
 	t.Helper()
 
-	rawKey, err := auth.GenerateKey()
+	rawKey, err := apikeys.GenerateKey("test_live_")
 	if err != nil {
-		t.Fatalf("auth.GenerateKey(): %v", err)
+		t.Fatalf("apikeys.GenerateKey(prefix): %v", err)
 	}
-	if _, err := s.Create(context.Background(), auth.Hash(rawKey), testAPIKeyLabel); err != nil {
+	if _, err := s.Create(context.Background(), apikeys.Hash(rawKey), testAPIKeyLabel); err != nil {
 		t.Fatalf("auth store Create(): %v", err)
 	}
 	return rawKey
@@ -87,7 +87,7 @@ type testServer struct {
 
 // newTestServer собирает полный mux через router.New — тот же код, который
 // main.go использует в проде — и поднимает его в httptest.Server.
-// Каждый тест получает свой собственный Store/Metrics/Registry/auth.Store,
+// Каждый тест получает свой собственный Store/Metrics/Registry/apikeys.Store,
 // чтобы тесты не делили состояние и могли спокойно идти параллельно.
 func newTestServer(t *testing.T) *testServer {
 	t.Helper()
@@ -108,9 +108,9 @@ func newTestServer(t *testing.T) *testServer {
 	reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	m := metrics.New(reg)
 
-	authStore := auth.NewMemoryStore()
+	authStore := apikeys.NewMemoryStore()
 	rawKey := issueTestKey(t, authStore)
-	authMW := auth.NewMiddleware(authStore)
+	authMW := apikeys.NewMiddleware(authStore, "art-api")
 
 	mux := New(s, m, authMW)
 	srv := httptest.NewServer(mux)
@@ -128,9 +128,9 @@ func newUnreadyTestServer(t *testing.T) *testServer {
 	reg := prometheus.NewRegistry()
 	m := metrics.New(reg)
 
-	authStore := auth.NewMemoryStore()
+	authStore := apikeys.NewMemoryStore()
 	rawKey := issueTestKey(t, authStore)
-	authMW := auth.NewMiddleware(authStore)
+	authMW := apikeys.NewMiddleware(authStore, "art-api")
 
 	mux := New(s, m, authMW)
 	srv := httptest.NewServer(mux)
@@ -569,9 +569,9 @@ func TestArtworksList_WrongKey_Unauthorized(t *testing.T) {
 
 	// Синтаксически валидный wa_live_ ключ, но не выданный этому серверу —
 	// не должен совпасть ни с одним хешем в auth.MemoryStore.
-	bogusKey, err := auth.GenerateKey()
+	bogusKey, err := apikeys.GenerateKey("test_live_")
 	if err != nil {
-		t.Fatalf("auth.GenerateKey(): %v", err)
+		t.Fatalf("apikeys.GenerateKey(prefix): %v", err)
 	}
 
 	resp := authedGet(t, srv.URL+"/artworks", bogusKey)

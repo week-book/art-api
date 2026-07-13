@@ -19,8 +19,10 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/week-book/art-api/internal/auth"
+	"github.com/week-book/apikeys"
 )
+
+const keyPrefix = "wa_live_"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -37,7 +39,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	store, err := auth.NewPostgresStore(ctx, dsn)
+	store, err := apikeys.NewPostgresStore(ctx, dsn)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: connect to database: %v\n", err)
 		os.Exit(1)
@@ -68,7 +70,7 @@ func printUsage() {
 Требует переменную окружения DATABASE_URL.`)
 }
 
-func runCreate(ctx context.Context, store auth.Store, args []string) {
+func runCreate(ctx context.Context, store apikeys.Store, args []string) {
 	fs := flag.NewFlagSet("create", flag.ExitOnError)
 	label := fs.String("label", "", "описание ключа, например имя потребителя (обязательно)")
 	_ = fs.Parse(args)
@@ -78,13 +80,13 @@ func runCreate(ctx context.Context, store auth.Store, args []string) {
 		os.Exit(1)
 	}
 
-	rawKey, err := auth.GenerateKey()
+	rawKey, err := apikeys.GenerateKey(keyPrefix)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: generate key: %v\n", err)
 		os.Exit(1)
 	}
 
-	k, err := store.Create(ctx, auth.Hash(rawKey), *label)
+	k, err := store.Create(ctx, apikeys.Hash(rawKey), *label)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: save key: %v\n", err)
 		os.Exit(1)
@@ -96,7 +98,7 @@ func runCreate(ctx context.Context, store auth.Store, args []string) {
 	fmt.Println(rawKey)
 }
 
-func runList(ctx context.Context, store auth.Store) {
+func runList(ctx context.Context, store apikeys.Store) {
 	keys, err := store.List(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: list keys: %v\n", err)
@@ -125,7 +127,7 @@ func runList(ctx context.Context, store auth.Store) {
 	w.Flush()
 }
 
-func runRevoke(ctx context.Context, store auth.Store, args []string) {
+func runRevoke(ctx context.Context, store apikeys.Store, args []string) {
 	if len(args) != 1 {
 		fmt.Fprintln(os.Stderr, "error: usage: artkeys revoke <id>")
 		os.Exit(1)
