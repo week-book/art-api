@@ -10,7 +10,8 @@ package router
 import (
 	"net/http"
 
-	"github.com/week-book/art-api/internal/auth"
+	"github.com/week-book/apikeys"
+
 	"github.com/week-book/art-api/internal/handlers"
 	"github.com/week-book/art-api/internal/metrics"
 	"github.com/week-book/art-api/internal/store"
@@ -27,7 +28,7 @@ import (
 // Prometheus scrape не должны зависеть от наличия ключа, это усложнило бы
 // деплой без реальной пользы для безопасности (эти эндпоинты не отдают
 // данные архива).
-func New(s *store.Store, m *metrics.Metrics, authMW *auth.Middleware) *http.ServeMux {
+func New(s *store.Store, m *metrics.Metrics, authMW *apikeys.Middleware) *http.ServeMux {
 	health := handlers.NewHealth(s)
 	artworks := handlers.NewArtworks(s, m)
 	artists := handlers.NewArtists(s)
